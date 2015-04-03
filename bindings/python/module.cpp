@@ -8,12 +8,6 @@
 namespace python = boost::python;
 
 
-python::object double_matrix_python(PyObject* m)
-{
-    Eigen::MatrixXd _m = python::extract<Eigen::MatrixXd>(m);
-    return python::object(double_matrix(_m));
-}
-
 python::object fgm_python(PyObject* KP, PyObject* KQ, PyObject* Ct, PyObject* asgTX,
                           const python::dict& gph1, const python::dict& gph2,
                           const python::dict& params)
@@ -32,6 +26,5 @@ python::object fgm_python(PyObject* KP, PyObject* KQ, PyObject* Ct, PyObject* as
 BOOST_PYTHON_MODULE(fgm)
 {
     initializeConverters();
-    python::def("double_matrix", double_matrix_python);
     python::def("fgm", fgm_python);
 }
