@@ -4,8 +4,12 @@
 #include <iostream>
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
+#include "normalize_bistochastic.cpp"
+#include "multGXHSQTr.cpp"
+#include "hungarian.cpp"
 
 using Eigen::MatrixXd;
+using Eigen::VectorXd;
 using Eigen::SparseMatrix;
 
 
@@ -60,8 +64,107 @@ MatrixXd mat2indC(const MatrixXd& m)
             }
         }
     }
-    Eigen::Map<MatrixXd> result(cols.data(), cols.size(), 1);
+    Eigen::Map<MatrixXd> result(cols.data(), 1, cols.size());
     return result;
+}
+
+MatrixXd multDiag(MatrixXd& A, VectorXd& v)
+{
+    int m = A.rows();
+    MatrixXd V = v.adjoint().replicate(m, 1);
+    return A.cwiseProduct(V);
+}
+
+int sub2ind(int dimrow, int dimcol, int row, int col)
+{
+    return dimrow*col + row;
+}
+
+
+VectorXd sub2ind(int dimrow, int dimcol, VectorXd setrow, VectorXd setcol)
+{
+    VectorXd genidx(setrow.rows());
+    for (int i = 0; i < setrow.rows(); i++)
+    {
+        genidx(i) = sub2ind(dimrow, dimcol, setrow(i), setcol(i));
+    }
+    return genidx;
+}
+
+VectorXd find(const VectorXd a)
+{
+    std::vector<double> res;
+    for (int i=0; i < a.rows(); i++)
+    {
+        if (a(i) != 0)
+        {
+            res.push_back(i);
+        }
+    }
+    Eigen::Map<VectorXd> result(res.data(), res.size());
+    return result;
+}
+
+MatrixXd gmPosDHun(MatrixXd& X0)
+{
+    X0 *= -1;
+    X0.array() += X0.maxCoeff();
+
+    int n1 = X0.rows();
+    int n2 = X0.cols();
+
+    MatrixXd result_matrix(n1, n2);
+    result_matrix.fill(0);
+    findMatching(X0, result_matrix, MATCH_MAX);
+    
+    VectorXd result_vector(n1);
+    for(int row = 0; row < n1; row++)
+    {
+        for(int col = 0; col < n2; col++)
+        {
+            if(result_matrix(row + n1*col))
+            {
+                result_vector(row) = col;
+                break;
+            }
+        }
+    }
+
+    // index -> matrix
+    VectorXd idx;
+    if (n1 <= n2)
+    {
+        idx = sub2ind(n1, n2, VectorXd::LinSpaced(1, 0, n1-1), result_vector.adjoint());
+    }
+    else
+    {
+        VectorXd temp1 = find(result_vector);
+        VectorXd temp2(temp1.size());
+        for (int i = 0; i < temp1.size(); i++)
+        {
+            temp2(i) = result_vector(temp1(i));
+        }
+        idx = sub2ind(n1, n2, temp1.adjoint(), temp2.adjoint());
+    }
+
+    MatrixXd X(n1, n2);
+    X.fill(0);
+    for (int i = 0; i < idx.size(); i++)
+    {
+        X(idx(i)) = 1;
+    }
+    return X;
+}
+
+double pathDObjGm(MatrixXd& X, SparseMatrix<double>& G1s, SparseMatrix<double>& G2s, SparseMatrix<double>& H1s, SparseMatrix<double>& H2s, MatrixXd& KP, MatrixXd& KQ)
+{
+    SparseMatrix<double> Xs = X.sparseView();
+    SparseMatrix<double> GXGs = G1s.adjoint() * Xs * G2s;
+    SparseMatrix<double> HXHs = H1s.adjoint() * Xs * H2s;
+
+    double tmp1 = KP.sparseView().cwiseProduct(Xs).sum();
+    double tmp2 = GXGs.cwiseProduct(HXHs).cwiseProduct(KQ).sum();
+    return tmp1 + tmp2;
 }
 
 MatrixXd fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
@@ -76,7 +179,7 @@ MatrixXd fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
     bool isDeb = false;
 
     // weight
-    Eigen::VectorXd alps = Eigen::VectorXd::LinSpaced(nAlp, 0, 1);
+    VectorXd alps = VectorXd::LinSpaced(nAlp, 0, 1);
 
     // graph elements
     MatrixXd G1 = gph1["G"];
@@ -91,10 +194,6 @@ MatrixXd fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
     int m2 = G2.cols();
     int ns[] = { n1, n2 };
 
-    MatrixXd zero = MatrixXd::Zero(2, 3);
-    zero << 1, 0, 0, 0, 1, 0;
-    std::cout << zero << std::endl << std::endl << mat2ind(zero) << std::endl << std::endl << mat2indC(zero);
-
     // add additional nodes to make sure n1 == n2
     if (n1 < n2)
     {
@@ -103,8 +202,6 @@ MatrixXd fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
         G1 = resize(G1, n2, m1, 0);
         H1 = resize(H1, n2, m1, 0);
         Ct = resize(Ct, n2, n2, 1);
-        //if !isempty(XT)
-        //	XT = [XT; zeros(n2 - n1, n2)];
     }
     else if (n1 > n2)
     {
@@ -113,8 +210,6 @@ MatrixXd fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
         G2 = resize(G2, n1, m2, 0);
         H2 = resize(H2, n1, m2, 0);
         Ct = resize(Ct, n1, n1, 1);
-        //if !isempty(XT)
-        //	XT = [XT, zeros(n1, n1 - n2)];
     }
 
     // auxiliary variables (for saving computational time)
@@ -135,10 +230,220 @@ MatrixXd fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
     SparseMatrix<double> G2s = G2.sparseView();
     SparseMatrix<double> H1s = H1.sparseView();
     SparseMatrix<double> H2s = H2.sparseView();
-    MatrixXd HH1s = H1s.adjoint() * H1s;
-    MatrixXd HH2s = H2s.adjoint() * H2s;
 
-    //std::cout << alps << std::endl;
+    MatrixXd XQ1, XQ2;
+
+    if (XQ1.size() == 0)
+    {
+        // factorize KQ using SVD
+        Eigen::JacobiSVD<MatrixXd> svd(KQ, Eigen::ComputeFullU | Eigen::ComputeFullV);
+
+        MatrixXd U = svd.matrixU();
+        MatrixXd V = svd.matrixV();
+
+        // test
+        MatrixXd S = MatrixXd::Zero(KQ.rows(), KQ.cols());
+        S.diagonal() = svd.singularValues();
+        std::cout << (KQ.isApprox(U*S*V.adjoint())) << std::endl;
+
+        VectorXd s = svd.singularValues();
+        int length = s.size();
+
+        MatrixXd Us = U.leftCols(length);
+        MatrixXd Vs = V.leftCols(length);
+        VectorXd s_sqrt = s.head(length).cwiseSqrt().real();
+        XQ1 = multDiag(Us, s_sqrt).adjoint();
+        XQ2 = multDiag(Vs, s_sqrt).adjoint();
+        //XQ1 = XQ1.adjoint();
+        //XQ2 = XQ2.adjoint();
+    }
+    else
+    {
+        // already been factorized(eg, dgm)
+        //XQ1 = XQ10;
+        //XQ2 = XQ20;
+    }
+
+    // auxiliary variables for computing the derivative of the constant term
+    MatrixXd QQ1 = XQ1.adjoint() * XQ1;
+    MatrixXd QQ2 = XQ2.adjoint() * XQ2;
+    MatrixXd GHHQQG = G1 * HH1.cwiseProduct(QQ1) * G1.adjoint() + G2 * HH2.cwiseProduct(QQ2) * G2.adjoint();
+    double gamma = QQ1.cwiseProduct(GG1).cwiseProduct(HH1).sum() + QQ2.cwiseProduct(GG2).cwiseProduct(HH2).sum();
+
+
+
+
+
+
+    double eps = std::numeric_limits<double>::epsilon();
+    
+    // initialize from a doubly stochastic matrix
+    MatrixXd X0 = MatrixXd(Ct.rows(), Ct.cols());
+    double iv = 1 + eps;
+    for (int i = 0; i < X0.rows(); ++i)
+    {
+        for (int j = 0; j < X0.cols(); ++j)
+            X0(i, j) = Ct(i, j) == 0 ? 0 : iv;
+    }
+
+    double tol = 1e-7;
+    n1 = X0.rows();
+    n2 = X0.cols();
+    MatrixXd X;
+
+    if (n1 != n2)
+    {
+        // non-square
+        int n_max = (n1 > n2) ? n1 : n2;
+        MatrixXd Xslack = resize(X0, n_max, n_max, 1);
+
+        Xslack = normalize_bistochastic(Xslack, tol, 1000);
+        Xslack.conservativeResize(n1, n2);
+        X = Xslack;
+    }
+    else
+    {
+        // square
+        X0 = normalize_bistochastic(X0, tol, 1000);
+    }
+
+
+    // Compute objective for the path - following algorithm.
+    SparseMatrix<double> Xs = X0.sparseView();
+    SparseMatrix<double> GXGs = G1s.adjoint() * Xs * G2s;
+    SparseMatrix<double> HXHs = H1s.adjoint() * Xs * H2s;
+    double tmp1 = KP.sparseView().cwiseProduct(Xs).sum();
+    double tmp2 = GXGs.cwiseProduct(HXHs).cwiseProduct(KQ).sum();
+    double objGm0 = tmp1 + tmp2;
+
+    MatrixXd nIts = MatrixXd::Zero(1, nAlp);
+    MatrixXd objs = MatrixXd::Zero(1, nAlp);
+    MatrixXd objGms = MatrixXd::Zero(1, nAlp);
+    MatrixXd objCons = MatrixXd::Zero(1, nAlp);
+    MatrixXd objVexs = MatrixXd::Zero(1, nAlp);
+    MatrixXd objCavs = MatrixXd::Zero(1, nAlp);
+    MatrixXd useIps = MatrixXd::Zero(1, nAlp);
+
+
+    //[Xs, objInss, objIn2ss] = cellss(1, nAlp);
+
+
+
+    // path-following
+    for (int iAlp = 0; iAlp < nAlp; ++iAlp)
+    {
+        // scale of alpha
+        double alp = alps(iAlp);
+    
+  cout << "ORIGINAL MATRIX" << endl;
+  cout << X0 << endl;
+  cout << endl;
+        // ================MFW begin====================
+        //[X, nIts(iAlp), objIns] = mfwDIter(X0, alp, nItMa, nHst, isDeb);
+        vector<SparseMatrix<double>> Ys(nHst);
+        SparseMatrix<double> X0s = X0.sparseView();
+
+        // main iteration
+        for (int nIt = 0; nIt < nItMa; ++nIt)
+        {
+            // gradient
+            GXGs = G1s.adjoint() * X0s * G2s;
+            HXHs = H1s.adjoint() * X0s * H2s;
+            SparseMatrix<double> GrGm = KP.sparseView() + H1s * GXGs.cwiseProduct(KQ) * H2s.adjoint() + G1s * HXHs.cwiseProduct(KQ) * G2s.adjoint();
+            SparseMatrix<double> GHHQQGs = GHHQQG.sparseView();
+            SparseMatrix<double> GrCon = 2 * GHHQQGs * X0s;
+            SparseMatrix<double> Gr = GrGm + (alp - .5) * GrCon;
+
+            // optimal direction
+            SparseMatrix<double> Y = gmPosDHun(MatrixXd(Gr)).sparseView();
+            SparseMatrix<double> V = Y - X0s;
+
+            // save to history
+            int pHst = (nIt - 1) % nHst;
+            Ys[pHst] = Y / nHst;
+
+            // alternative direction
+            if (nIt >= nHst)
+            {
+                SparseMatrix<double> W = -X0s;
+                for (int iHst = 0; iHst < nHst; ++iHst)
+                    W = W + Ys[iHst];
+
+                double vV = Gr.cwiseProduct(V).sum() / V.norm();
+                double vW = Gr.cwiseProduct(W).sum() / W.norm();
+                if (vW > vV)
+                {
+                    V = W;
+                    Ys[pHst] = Y / nHst;
+                }
+            }
+
+            // step size
+            // [aGm, bGm] = fwDStepGm(X0, V);
+            SparseMatrix<double> GYGs = G1s.adjoint() * V * G2s;
+            SparseMatrix<double> HYHs = H1s.adjoint() * V * H2s;
+            double aGm = GYGs.cwiseProduct(HYHs).cwiseProduct(KQ).sum();
+            double bGm = KP.sparseView().cwiseProduct(V).sum() + (GXGs.cwiseProduct(HYHs) + GYGs.cwiseProduct(HXHs)).cwiseProduct(KQ).sum();
+
+            // [aCon, bCon] = fwDStepCon(X0, V);
+            MatrixXd YY = V * MatrixXd(V.adjoint());
+            MatrixXd XY = X0 * V.adjoint();
+            tmp1 = multGXHSQTr(indG1.adjoint(), YY, indG1, IndHH1, QQ1);
+            tmp2 = multGXHSQTr(indG2.adjoint(), YY, indG2, IndHH2, QQ2);
+            double aCon = tmp1 + tmp2;
+            tmp1 = multGXHSQTr(indG1.adjoint(), XY, indG1, IndHH1, QQ1);
+            tmp2 = multGXHSQTr(indG2.adjoint(), XY, indG2, IndHH2, QQ2);
+            double bCon = 2 * (tmp1 + tmp2);
+
+            double a = aGm + (alp - .5) * aCon;
+            double b = bGm + (alp - .5) * bCon;
+
+            // t = fwStepOpt(a, b);
+            double t = -b / a / 2;
+            if (t <= 0)
+                t = (a > 0) ? 1 : 0;
+            else if (t <= 0.5)
+                if (a > 0)
+                    t = 1;
+            else if (t <= 1)
+                if (a > 0)
+                    t = 1;
+            else
+                t = (a > 0) ? 0 : 1;
+            
+            // update
+            X = X0s + t * V;
+
+            // stop condition
+            if ((X.sparseView() - X0s).norm() < eps || t < eps)
+                break;
+
+            // store
+            X0s = X.sparseView();
+        }
+        cout << "MFW RESULT" << endl;
+        cout << X0s << endl;
+        // ================MFW end====================
+
+
+
+        // objective
+        objGms(iAlp) = pathDObjGm(X, G1s, G2s, H1s, H2s, KP, KQ);
+
+        MatrixXd XX = X * X.adjoint();
+        tmp1 = multGXHSQTr(indG1.adjoint(), XX, indG1, IndHH1, QQ1);
+        tmp2 = multGXHSQTr(indG2.adjoint(), XX, indG2, IndHH2, QQ2);
+        objCons(iAlp) = tmp1 + tmp2;
+
+        objVexs(iAlp) = objGms(iAlp) - .5 * objCons(iAlp);
+        objCavs(iAlp) = objGms(iAlp) + .5 * objCons(iAlp);
+
+        objs(iAlp) = objGms(iAlp) + (alp - .5) * (objCons(iAlp) - 0);
+
+        // store
+        X0 = X;
+
+    }
 
     return Ct;
 }
