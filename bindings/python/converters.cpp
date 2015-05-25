@@ -70,9 +70,14 @@ struct numpy2eigen {
         
         void* storage = ((python::converter::rvalue_from_python_storage<Eigen::MatrixXd>*)(data))->storage.bytes;
 
-        npy_intp* shape = PyArray_SHAPE(pao);
-        Eigen::MatrixXd* m = new (storage) Eigen::MatrixXd(shape[0], shape[1]);
-        memcpy(m->data(), PyArray_DATA(pao), m->size() * sizeof(double));
+        int rows = PyArray_DIMS(pao)[0];
+        int cols = PyArray_DIMS(pao)[1];
+        Eigen::MatrixXd& m = * new (storage) Eigen::MatrixXd(rows, cols);
+        Eigen::MatrixXd::Scalar* pyData = (Eigen::MatrixXd::Scalar*) PyArray_DATA(pao);
+        for (int i = 0; i < rows; ++i)
+            for (int j = 0; j < cols; ++j)
+                m(i, j) = pyData[i * cols + j];
+
         data->convertible = storage;
     }
 };
