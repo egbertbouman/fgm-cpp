@@ -107,16 +107,17 @@ VectorXd find(const VectorXd a)
 
 MatrixXd gmPosDHun(MatrixXd& X0)
 {
+    double max_oeff = X0.maxCoeff();
     X0 *= -1;
-    X0.array() += X0.maxCoeff();
+    X0.array() += max_oeff;
 
     int n1 = X0.rows();
     int n2 = X0.cols();
 
     MatrixXd result_matrix(n1, n2);
     result_matrix.fill(0);
-    findMatching(X0, result_matrix, MATCH_MAX);
-    
+    findMatching(X0, result_matrix, MATCH_MIN);
+
     VectorXd result_vector(n1);
     for(int row = 0; row < n1; row++)
     {
@@ -129,12 +130,13 @@ MatrixXd gmPosDHun(MatrixXd& X0)
             }
         }
     }
+    cout << endl << "result_vector" << endl << result_vector << endl;
 
     // index -> matrix
     VectorXd idx;
     if (n1 <= n2)
     {
-        idx = sub2ind(n1, n2, VectorXd::LinSpaced(1, 0, n1-1), result_vector.adjoint());
+        idx = sub2ind(n1, n2, VectorXd::LinSpaced(n1, 0, n1-1), result_vector.adjoint());
     }
     else
     {
@@ -146,6 +148,7 @@ MatrixXd gmPosDHun(MatrixXd& X0)
         }
         idx = sub2ind(n1, n2, temp1.adjoint(), temp2.adjoint());
     }
+    cout << endl << "idx" << endl << idx << endl;
 
     MatrixXd X(n1, n2);
     X.fill(0);
@@ -230,6 +233,10 @@ MatrixXd fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
     SparseMatrix<double> G2s = G2.sparseView();
     SparseMatrix<double> H1s = H1.sparseView();
     SparseMatrix<double> H2s = H2.sparseView();
+
+    cout << G1.rows() << G1.cols() << endl;
+    cout << endl << G1.topLeftCorner(7, 7) << endl;
+    cout << endl << G2.topLeftCorner(7, 7) << endl;
 
     MatrixXd XQ1, XQ2;
 
@@ -357,7 +364,10 @@ MatrixXd fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
             // optimal direction
             SparseMatrix<double> Y = gmPosDHun(MatrixXd(Gr)).sparseView();
             SparseMatrix<double> V = Y - X0s;
-
+            cout << KQ.rows() << KQ.cols() << endl;
+            cout << KQ.topLeftCorner(5, 5) << endl;
+            cout << endl << Y.topLeftCorner(7, 7) << endl;
+            cout << endl << V.topLeftCorner(7, 7) << endl;
             // save to history
             int pHst = (nIt - 1) % nHst;
             Ys[pHst] = Y / nHst;
@@ -420,9 +430,11 @@ MatrixXd fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
 
             // store
             X0s = X.sparseView();
+            cout << "MFW RESULT" << endl;
+            //cout << X0s << endl;
+            cout << t << a << b << endl;
         }
-        cout << "MFW RESULT" << endl;
-        cout << X0s << endl;
+
         // ================MFW end====================
 
 
