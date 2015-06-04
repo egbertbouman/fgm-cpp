@@ -46,7 +46,10 @@ struct eigen2numpy {
     {
         npy_intp shape[] = {m.rows(), m.cols()};
         PyArrayObject* array = (PyArrayObject*) PyArray_SimpleNew(2, shape, NPY_DOUBLE);
-        memcpy(PyArray_DATA(array), m.data(), m.size() * sizeof(double));
+        Eigen::MatrixXd::Scalar* pyData = (Eigen::MatrixXd::Scalar*)PyArray_DATA(array);
+        for (int i = 0; i < m.rows(); ++i)
+            for (int j = 0; j < m.cols(); ++j)
+                pyData[i * m.cols() + j] = m(i, j);
         return (PyObject*)array;
     }
 };
