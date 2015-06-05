@@ -12,305 +12,287 @@ using Eigen::MatrixXd;
 using Eigen::VectorXd;
 using namespace std;
 
-const int MATCH_MIN = 0;
-const int MATCH_MAX = 1;
+void findMatching(MatrixXd& m, VectorXd& assignment);
+void step2a(VectorXd& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim);
+void step2b(VectorXd& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim);
+void step3(VectorXd& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim);
+void step4(VectorXd& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim, int row, int col);
+void step5(VectorXd& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim);
+void buildassignmentvector(VectorXd& assignment, MatrixXd& starMatrix, int nOfRows, int nOfColumns);
 
-/*
- * readMatrix
- * read a file into a matrix object
- * file must have matrix dimension as first line
- * matrix must be square
- */
-void readMatrix(const char* filename, MatrixXd& m) {
-  ifstream fin(filename);
-  
-  if (!fin) {
-    cout << "Cannot open file." << endl;
+
+void findMatching(MatrixXd& m, VectorXd& assignment) {
+    int nOfRows = m.rows();
+    int nOfColumns = m.cols();
+    int minDim, row, col;
+
+    double value, minValue;
+
+    MatrixXd starMatrix(m.rows(), m.cols());
+    MatrixXd newStarMatrix(m.rows(), m.cols());
+    MatrixXd primeMatrix(m.rows(), m.cols());
+    VectorXd coveredColumns(m.rows());
+    VectorXd coveredRows(m.cols());
+
+    starMatrix.fill(0);
+    newStarMatrix.fill(0);
+    primeMatrix.fill(0);
+    coveredColumns.fill(0);
+    coveredRows.fill(0);
+
+    assignment.fill(0);
+
+    for (row = 0; row<nOfRows; row++)
+    for (col = 0; col<nOfColumns; col++)
+    if (m(row, col) < 0)
+        throw std::invalid_argument("All matrix elements have to be positive!");
+
+    /* preliminary steps */
+    if (nOfRows <= nOfColumns)
+    {
+        minDim = nOfRows;
+
+        for (row = 0; row<nOfRows; row++)
+        {
+            /* find the smallest element in the row */
+            minValue = m(row, 0);
+            for (col = 0; col<nOfColumns; col++)
+            {
+                value = m(row, col);
+                if (value < minValue)
+                    minValue = value;
+            }
+
+            /* subtract the smallest element from each element of the row */
+            for (col = 0; col<nOfColumns; col++)
+                m(row, col) -= minValue;
+        }
+
+        /* Steps 1 and 2a */
+        for (row = 0; row<nOfRows; row++)
+            for (col = 0; col<nOfColumns; col++)
+                if (m(row, col) == 0)
+                    if (!coveredColumns(col))
+                    {
+                        starMatrix(row, col) = true;
+                        coveredColumns(col) = true;
+                        break;
+                    }
+    }
+    else /* if(nOfRows > nOfColumns) */
+    {
+        minDim = nOfColumns;
+
+        for (col = 0; col<nOfColumns; col++)
+        {
+            /* find the smallest element in the column */
+            minValue = m(0, col);
+            for (row = 0; row<nOfRows; row++)
+            {
+                value = m(row, col);
+                if (value < minValue)
+                    minValue = value;
+            }
+
+            /* subtract the smallest element from each element of the column */
+            for (row = 0; row<nOfRows; row++)
+                m(row, col) -= minValue;
+        }
+
+        /* Steps 1 and 2a */
+        for (col = 0; col<nOfColumns; col++)
+            for (row = 0; row<nOfRows; row++)
+                if (m(row, col) == 0)
+                    if (!coveredRows(row))
+                    {
+                        starMatrix(row, col) = true;
+                        coveredColumns(col) = true;
+                        coveredRows(row) = true;
+                        break;
+                    }
+        coveredRows.fill(0);
+
+    }
+
+    /* move to step 2b */
+    step2b(assignment, m, starMatrix, newStarMatrix, primeMatrix, coveredColumns, coveredRows, nOfRows, nOfColumns, minDim);
+
     return;
-  }
-  
-  // read in matrix dimensions and
-  // create a matrix of that size
-  int n_rows, n_cols;
-  fin >> n_rows >> n_cols;
-  MatrixXd temp(n_rows, n_cols);
-  
-  // read elements into the temporary matrix
-  for (int i=0; i<n_rows; i++) {
-    for (int j=0; j<n_cols; j++) {
-      fin >> temp(i,j);
-    }
-  }
-  fin.close();
-  
-  // if the dimensions are equal (square matrix), we're done
-  // else, have to figure out larger dimension and pad with matrix max
-  if (n_rows == n_cols) {
-    m = temp;
-  }
-  else {
-    float max_elem = temp.maxCoeff(); // find the max element
-    float dim = max(n_rows, n_cols); // find the dimension for the new, square matrix
-    m.resize(dim,dim);
-    // fill the matrix with the elements from temp and pad with max element
-    for (int i=0; i < dim; i++) {
-      for (int j=0; j < dim; j++) {
-        if (i >= n_rows || j >= n_cols) m(i,j) = max_elem;
-        else m(i,j) = temp(i,j);
-      }
-    }
-  }
 }
 
-/*
- * reduce
- * reduces matrix based on row and column minimums
- */
-void reduce(MatrixXd& m) {
-  // subtract row minimum from each row
-  for (int i=0; i<m.rows(); i++) {
-    float minElement = m.row(i).minCoeff();
-    VectorXd rMinusMin(m.rows());
-    rMinusMin.fill(-minElement);
-    m.row(i) += rMinusMin;
-  }
-}
-
-/*
- * hasMark
- * if there is a starred/primed zero in the given row/col, returns it's index
- * else, returns -1
- */
-int hasMark(VectorXd& v) {  
-  for (int i=0; i<v.size(); i++) {
-    if (v(i)) {
-      return i;
-    }
-  }
-  return -1;
-}
-
-/*
- * swapStarsAndPrimes
- * Swap stars and primes based on step 5 of Hungarian algorithm
- * Z0 is uncovered primed zero we've found
- * Z1 is the stared zero in the column of Z0 (if any)
- * Z2 is the primed zero in the row of Z1 (will always be one)
- * ...continue series until we reach a primed zero with no starred zero in its column
- * Unstar each starred zero, star each primed zero, erase all primes and uncover every line in the matrix
- */
-void swapStarsAndPrimes(int i, int j, MatrixXd& stars, MatrixXd& primes) {
-  int primeRow = i;
-  int primeCol = j;
-  
-  bool done = false;
-  while (!done) {
-    // find row index of row that has a 0* in the same col as the current 0'
-    VectorXd col = stars.col(primeCol);
-    int starInPrimeColRow = hasMark(col); 
-    
-    if (starInPrimeColRow < 0) {
-      // star the prime we're looking at
-      primes(primeRow, primeCol) = 0;
-      stars(primeRow, primeCol) = 1;
-      done = true;
-    }
-    else {
-      // find which col has a 0' in the same row as z1
-      VectorXd row = primes.row(starInPrimeColRow);
-      int primeInStarRowCol = hasMark(row);
-      
-      // star first primed zero
-      primes(primeRow, primeCol) = 0;
-      stars(primeRow, primeCol) = 1;
-      //primes(starInPrimeColRow, primeInStarRowCol) = 0;
-      //stars(starInPrimeColRow, primeInStarRowCol) = 1;
-      
-      // unstar starred zero
-      stars(starInPrimeColRow, primeCol) = 0;
-      
-      // set index of last prime, will check it's column for 0*s next
-      primeRow = starInPrimeColRow;
-      primeCol = primeInStarRowCol;
-    }
-  }
-  // clear primes
-  primes.fill(0);
-}
-
-/*
- * findMatching
- * implementation of the Hungarian matching algorithm
- * referenced from: http://csclab.murraystate.edu/bob.pilgrim/445/munkres.html
- */
-void findMatching(MatrixXd& m, MatrixXd& result, int type) {
-  MatrixXd n = m; // make a copy of m for reducing
-  int dim = n.rows(); // dimension of matrix, used for checking if we've reduced
-                      // the matrix enough yet
-  
-  MatrixXd stars(m.rows(), m.cols()); // matrix for storing our "starred" 0s (0*)
-  stars.fill(0);
-  MatrixXd primes(m.rows(), m.cols()); // matrix for storing our "primed" 0s (0')
-  primes.fill(0);
-  VectorXd rowCover(m.rows()); // keep track of which rows are "covered"
-  rowCover.fill(0);
-  VectorXd colCover(m.cols()); // keep track of which columns are "covered"
-  colCover.fill(0);
-  
-  // to do maximization rather than minimization, we have to
-  // transform the matrix by subtracting every value from the maximum
-  if (type == MATCH_MAX) {
-    float max = n.maxCoeff();
-    MatrixXd maxMat(n.rows(), n.cols());
-    maxMat.fill(max);
-    n = maxMat - n;
-  }
-  
-  // Step 1 
-  // Reduce matrix
-  reduce(n);
-  
-  // Step 2
-  // Find a zero in the matrix. If there is no starred zero in 
-  // its row or column, star Z. Repeat for each element in the matrix.
-  for (int i=0; i<n.rows(); i++) {
-    for (int j=0; j<n.cols(); j++) {
-      if (n(i,j) == 0 && !rowCover(i) && !colCover(j)) {
-        stars(i,j) = 1;
-        rowCover(i) = 1;
-        colCover(j) = 1;
-      }
-    }
-  }
-  // covers need to be cleared for following steps
-  rowCover.fill(0);
-  colCover.fill(0);
-  
-  while (true) {
-    // Step 3
-    // Cover all columns that have a starred zero
-    // If the number of columns with starred zeroes equals the matrix
-    // dimensions, we are done! Otherwise, move on to step 4.
-    step3:
-    for (int j=0; j<n.cols(); j++) {
-      VectorXd col = stars.col(j);
-      if (hasMark(col) >= 0) {
-        colCover(j) = 1;
-      }
-    }
-    if (colCover.sum() == dim) {
-      result = stars;
-      return;
-    }
-    
-    // Step 4
-    // Find a non-covered zero and prime it
-    step4:
-    for (int i=0; i<n.rows(); i++) {
-      for (int j=0; j<n.cols(); j++) {
-        if (n(i,j) == 0 && !rowCover(i) && !colCover(j)) {
-          primes(i,j) = 1;
-          // if no starred zero in the row...
-          VectorXd row = stars.row(i);
-          if (hasMark(row) < 0) {
-            // Step 5
-            // swap stars and primes            
-            swapStarsAndPrimes(i, j, stars, primes);
-    
-            // clear lines
-            rowCover.fill(0);
-            colCover.fill(0);
-            
-            goto step3;
-          }
-          else {
-            // cover row
-            rowCover(i) = 1;
-            
-            // uncover column of the starred zero in the same row
-            int col = hasMark(row);
-            colCover(col) = 0;
-          }
-        }
-      }
-    }
-    
-    // Step 6
-    // Should now be no more uncovered zeroes
-    // Get the minimum uncovered element
-    float min = 1000000;
-    for (int i=0; i<n.rows(); i++) {
-      for (int j=0; j<n.cols(); j++) {
-        if (!rowCover(i) && !colCover(j) && n(i,j) < min) {
-          min = n(i,j);
-        }
-      }
-    }
-    
-    // Subtract minimum from uncovered elements, add it to elements covered twice
-    for (int i=0; i<n.rows(); i++) {
-      for (int j=0; j<n.cols(); j++) {
-        if (!rowCover(i) && !colCover(j)) {
-          n(i,j) -= min;
-        }
-        else if (rowCover(i) && colCover(j)) {
-          n(i,j) += min;
-        }
-      }
-    }
-    
-    goto step4;
-  }
-}
-
-/*
- * main()
- */
-int main(int argc, char *argv[])
+void step2a(VectorXd& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim)
 {
-  if (argc != 2) {
-    cout << "Usage: ./a.out [matrixfile]" << endl;
-    return 0;
-  }
-  
-  // times
-    clock_t start, end;
-  float elapsedTime;
+    /* cover every column containing a starred zero */
+    for (int col = 0; col<nOfColumns; col++)
+    {
+        for (int row = 0; row < nOfRows; row++)
+        {
+            if (starMatrix(row, col))
+            {
+                coveredColumns(col) = true;
+                break;
+            }
+        }
+    }
 
-  // random seed
-  srand((unsigned)time(0));
+    /* move to step 3 */
+    step2b(assignment, m, starMatrix, newStarMatrix, primeMatrix, coveredColumns, coveredRows, nOfRows, nOfColumns, minDim);
+}
 
-    // start time
-  start = clock();
-  
-  // read in the matrix file
-  MatrixXd m(1,1);
-  readMatrix(argv[1], m);
-  
-  // create an empty matrix to put the result in
-  MatrixXd result(m.rows(), m.cols());
-  result.fill(0);
-  
-  // run the Hungarian (Munkres) algorithm to find the maximal matching
-  findMatching(m, result, MATCH_MIN);
-  
-  MatrixXd mask = m.cwiseProduct(result);
-  int sum = mask.sum();
-  
-  cout << "ORIGINAL MATRIX" << endl;
-  cout << m << endl;
-  cout << endl;
-  cout << "ASSIGNMENT RESULT" << endl;
-  cout << result << endl;
-  cout << endl;
-  cout << "FINAL SUM" << endl;
-  cout << sum << endl;
-  
-  
-  // stop time
-  end = clock();
-    elapsedTime = (float)(end - start) / CLOCKS_PER_SEC;
-  cout << "Completed in: " << elapsedTime << " s" << endl;
-    
-  return 0;
+void step2b(VectorXd& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim)
+{
+    /* count covered columns */
+    int nOfCoveredColumns = 0;
+    for (int col = 0; col<nOfColumns; col++)
+        if (coveredColumns(col))
+            nOfCoveredColumns++;
+
+    if (nOfCoveredColumns == minDim)
+    {
+        /* algorithm finished */
+        buildassignmentvector(assignment, starMatrix, nOfRows, nOfColumns);
+    }
+    else
+    {
+        /* move to step 3 */
+        step3(assignment, m, starMatrix, newStarMatrix, primeMatrix, coveredColumns, coveredRows, nOfRows, nOfColumns, minDim);
+    }
+
+}
+
+void step3(VectorXd& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim)
+{
+    int starCol;
+    bool zerosFound = true;
+    while (zerosFound)
+    {
+        zerosFound = false;
+        for (int col = 0; col<nOfColumns; col++)
+            if (!coveredColumns(col))
+                for (int row = 0; row<nOfRows; row++)
+                    if ((!coveredRows(row)) && (m(row, col) == 0))
+                    {
+                        /* prime zero */
+                        primeMatrix(row, col) = true;
+
+                        /* find starred zero in current row */
+                        for (starCol = 0; starCol<nOfColumns; starCol++)
+                            if (starMatrix(row, starCol))
+                                break;
+
+                        if (starCol == nOfColumns) /* no starred zero found */
+                        {
+                            /* move to step 4 */
+                            step4(assignment, m, starMatrix, newStarMatrix, primeMatrix, coveredColumns, coveredRows, nOfRows, nOfColumns, minDim, row, col);
+                            return;
+                        }
+                        else
+                        {
+                            coveredRows(row) = true;
+                            coveredColumns(starCol) = false;
+                            zerosFound = true;
+                            break;
+                        }
+                    }
+    }
+
+    /* move to step 5 */
+    step5(assignment, m, starMatrix, newStarMatrix, primeMatrix, coveredColumns, coveredRows, nOfRows, nOfColumns, minDim);
+}
+
+void step4(VectorXd& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim, int row, int col)
+{
+    int starRow, starCol, primeRow, primeCol;
+    int nOfElements = nOfRows*nOfColumns;
+
+    /* generate temporary copy of starMatrix */
+    for (int n = 0; n<nOfElements; n++)
+        newStarMatrix(n) = starMatrix(n);
+
+    /* star current zero */
+    newStarMatrix(row, col) = true;
+
+    /* find starred zero in current column */
+    starCol = col;
+    for (starRow = 0; starRow<nOfRows; starRow++)
+        if (starMatrix(starRow, starCol))
+            break;
+
+    while (starRow<nOfRows)
+    {
+        /* unstar the starred zero */
+        newStarMatrix(starRow, starCol) = false;
+
+        /* find primed zero in current row */
+        primeRow = starRow;
+        for (primeCol = 0; primeCol<nOfColumns; primeCol++)
+            if (primeMatrix(primeRow, primeCol))
+                break;
+
+        /* star the primed zero */
+        newStarMatrix(primeRow, primeCol) = true;
+
+        /* find starred zero in current column */
+        starCol = primeCol;
+        for (starRow = 0; starRow<nOfRows; starRow++)
+            if (starMatrix(starRow, starCol))
+                break;
+    }
+
+    /* use temporary copy as new starMatrix */
+    /* delete all primes, uncover all rows */
+    for (int n = 0; n<nOfElements; n++)
+    {
+        primeMatrix(n) = false;
+        starMatrix(n) = newStarMatrix(n);
+    }
+    for (int n = 0; n<nOfRows; n++)
+        coveredRows(n) = false;
+
+    /* move to step 2a */
+    step2a(assignment, m, starMatrix, newStarMatrix, primeMatrix, coveredColumns, coveredRows, nOfRows, nOfColumns, minDim);
+}
+
+void step5(VectorXd& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim)
+{
+    double h, value;
+    int row, col;
+
+    /* find smallest uncovered element h */
+    h = std::numeric_limits<int>::max();
+    for (row = 0; row<nOfRows; row++)
+        if (!coveredRows(row))
+            for (col = 0; col<nOfColumns; col++)
+                if (!coveredColumns(col))
+                {
+                    value = m(row, col);
+                    if (value < h)
+                        h = value;
+                }
+
+    /* add h to each covered row */
+    for (row = 0; row<nOfRows; row++)
+        if (coveredRows(row))
+            for (col = 0; col<nOfColumns; col++)
+                m(row, col) += h;
+
+    /* subtract h from each uncovered column */
+    for (col = 0; col<nOfColumns; col++)
+        if (!coveredColumns(col))
+            for (row = 0; row<nOfRows; row++)
+                m(row, col) -= h;
+
+    /* move to step 3 */
+    step3(assignment, m, starMatrix, newStarMatrix, primeMatrix, coveredColumns, coveredRows, nOfRows, nOfColumns, minDim);
+}
+
+void buildassignmentvector(VectorXd& assignment, MatrixXd& starMatrix, int nOfRows, int nOfColumns)
+{
+    for (int row = 0; row<nOfRows; row++)
+        for (int col = 0; col<nOfColumns; col++)
+            if (starMatrix(row, col))
+            {
+                assignment(row) = col;
+                break;
+            }
 }
