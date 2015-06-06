@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <iomanip>
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 #include "normalize_bistochastic.cpp"
@@ -38,33 +39,30 @@ MatrixXd mat2ind(const MatrixXd& m)
         {
             if (m(i, j) != 0)
             {
-                result(0, k) = i;
-                result(1, k) = j;
+                result(1, k) = i+1;
+                result(0, k) = j+1;
                 ++k;
             }
         }
     }
-    result(0, k) = m.rows();
-    result(1, k) = m.cols();
+    result(1, k) = m.rows();
+    result(0, k) = m.cols();
     result.conservativeResize(2, k + 1);
     return result;
 }
 
 MatrixXd mat2indC(const MatrixXd& m)
 {
-    std::vector<double> cols;
+    MatrixXd result(1, m.cols());
+    result.fill(0);
+
     for (int j = 0; j < m.cols(); ++j)
-    {
         for (int i = 0; i < m.rows(); ++i)
-        {
             if (m(i, j) != 0)
             {
-                cols.push_back(j);
+                result(j) = i+1;
                 break;
             }
-        }
-    }
-    Eigen::Map<MatrixXd> result(cols.data(), 1, cols.size());
     return result;
 }
 
@@ -114,23 +112,10 @@ MatrixXd gmPosDHun(MatrixXd& X0)
     int n1 = X0.rows();
     int n2 = X0.cols();
 
-    MatrixXd result_matrix(n1, n2);
-    result_matrix.fill(0);
-    findMatching(X0, result_matrix, MATCH_MIN);
-
     VectorXd result_vector(n1);
-    for(int row = 0; row < n1; row++)
-    {
-        for(int col = 0; col < n2; col++)
-        {
-            if(result_matrix(row + n1*col))
-            {
-                result_vector(row) = col;
-                break;
-            }
-        }
-    }
-    cout << endl << "result_vector" << endl << result_vector << endl;
+    result_vector.fill(0);
+    findMatching(X0, result_vector);
+    //cout << endl << "result_vector" << endl << result_vector << endl;
 
     // index -> matrix
     VectorXd idx;
@@ -148,7 +133,7 @@ MatrixXd gmPosDHun(MatrixXd& X0)
         }
         idx = sub2ind(n1, n2, temp1.adjoint(), temp2.adjoint());
     }
-    cout << endl << "idx" << endl << idx << endl;
+    //cout << endl << "idx" << endl << idx << endl;
 
     MatrixXd X(n1, n2);
     X.fill(0);
@@ -251,7 +236,6 @@ MatrixXd fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
         // test
         MatrixXd S = MatrixXd::Zero(KQ.rows(), KQ.cols());
         S.diagonal() = svd.singularValues();
-        std::cout << (KQ.isApprox(U*S*V.adjoint())) << std::endl;
 
         VectorXd s = svd.singularValues();
         int length = s.size();
@@ -332,26 +316,19 @@ MatrixXd fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
     MatrixXd useIps = MatrixXd::Zero(1, nAlp);
 
 
-    //[Xs, objInss, objIn2ss] = cellss(1, nAlp);
-
-
-
     // path-following
     for (int iAlp = 0; iAlp < nAlp; ++iAlp)
     {
         // scale of alpha
         double alp = alps(iAlp);
     
-  cout << "ORIGINAL MATRIX" << endl;
-  cout << X0 << endl;
-  cout << endl;
         // ================MFW begin====================
         //[X, nIts(iAlp), objIns] = mfwDIter(X0, alp, nItMa, nHst, isDeb);
         vector<SparseMatrix<double>> Ys(nHst);
         SparseMatrix<double> X0s = X0.sparseView();
 
         // main iteration
-        for (int nIt = 0; nIt < nItMa; ++nIt)
+        for (int nIt = 1; nIt < nItMa; ++nIt)
         {
             // gradient
             GXGs = G1s.adjoint() * X0s * G2s;
@@ -364,10 +341,7 @@ MatrixXd fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
             // optimal direction
             SparseMatrix<double> Y = gmPosDHun(MatrixXd(Gr)).sparseView();
             SparseMatrix<double> V = Y - X0s;
-            cout << KQ.rows() << KQ.cols() << endl;
-            cout << KQ.topLeftCorner(5, 5) << endl;
-            cout << endl << Y.topLeftCorner(7, 7) << endl;
-            cout << endl << V.topLeftCorner(7, 7) << endl;
+
             // save to history
             int pHst = (nIt - 1) % nHst;
             Ys[pHst] = Y / nHst;
@@ -397,7 +371,8 @@ MatrixXd fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
 
             // [aCon, bCon] = fwDStepCon(X0, V);
             MatrixXd YY = V * MatrixXd(V.adjoint());
-            MatrixXd XY = X0 * V.adjoint();
+            MatrixXd XY = X0s * MatrixXd(V.adjoint());
+
             tmp1 = multGXHSQTr(indG1.adjoint(), YY, indG1, IndHH1, QQ1);
             tmp2 = multGXHSQTr(indG2.adjoint(), YY, indG2, IndHH2, QQ2);
             double aCon = tmp1 + tmp2;
@@ -410,16 +385,25 @@ MatrixXd fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
 
             // t = fwStepOpt(a, b);
             double t = -b / a / 2;
+            //cout << endl << a << "\t" << b << "\t" << t << endl;
             if (t <= 0)
+            {
                 t = (a > 0) ? 1 : 0;
+            }
             else if (t <= 0.5)
+            {
                 if (a > 0)
                     t = 1;
+            }
             else if (t <= 1)
+            {
                 if (a > 0)
                     t = 1;
+            }
             else
+            {
                 t = (a > 0) ? 0 : 1;
+            }
             
             // update
             X = X0s + t * V;
@@ -430,14 +414,10 @@ MatrixXd fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
 
             // store
             X0s = X.sparseView();
-            cout << "MFW RESULT" << endl;
-            //cout << X0s << endl;
-            cout << t << a << b << endl;
         }
 
         // ================MFW end====================
-
-
+        cout << endl << setprecision(3) << fixed << X.topLeftCorner(7, 7) << endl;
 
         // objective
         objGms(iAlp) = pathDObjGm(X, G1s, G2s, H1s, H2s, KP, KQ);
@@ -457,6 +437,24 @@ MatrixXd fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
 
     }
 
-    return Ct;
+    //accuracy
+    double acc = 0;
+    if (asgTX.size() > 0)
+    {
+        int co = 0;
+        VectorXd idx = find(asgTX);
+        for (int i = 0; i < idx.size(); ++i)
+        {
+            // correct correspondences found
+            if (asgTX(idx(i)) == X(idx(i)))
+                co += 1;
+        }
+        // percentage
+        acc = co / idx.size();
+    }
+    cout << acc << endl;
+
+    //std::pair<MatrixXd, double> result(X, acc);
+    return X;
 }
 
