@@ -26,7 +26,7 @@ set libpaths=%libpaths% /LIBPATH:"%BOOST_ROOT%\stage\lib"
 set includes=%includes% /I C:\python27\include
 set libpaths=%libpaths% /LIBPATH:"C:\python27\libs"
 
-set cmdline=cl /LDd /EHsc /DBOOST_PYTHON_STATIC_LIB %includes% module.cpp /link %libpaths% /out:%name%.pyd
+set cmdline=cl /LDd /EHsc /DBOOST_PYTHON_STATIC_LIB /O2 /DNDEBUG %includes% module.cpp /link %libpaths% /out:%name%.pyd
 
 echo %cmdline%
 
