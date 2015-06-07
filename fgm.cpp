@@ -163,8 +163,6 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
     int nAlp = 101;
     int nItMa = 100;
     int nHst = 10;
-    bool isIp = false;
-    bool isDeb = false;
 
     // weight
     VectorXd alps = VectorXd::LinSpaced(nAlp, 0, 1);
@@ -223,47 +221,25 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
     cout << endl << G1.topLeftCorner(7, 7) << endl;
     cout << endl << G2.topLeftCorner(7, 7) << endl;
 
-    MatrixXd XQ1, XQ2;
+    // factorize KQ using SVD
+    Eigen::JacobiSVD<MatrixXd> svd(KQ, Eigen::ComputeFullU | Eigen::ComputeFullV);
 
-    if (XQ1.size() == 0)
-    {
-        // factorize KQ using SVD
-        Eigen::JacobiSVD<MatrixXd> svd(KQ, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    MatrixXd U = svd.matrixU();
+    MatrixXd V = svd.matrixV();
 
-        MatrixXd U = svd.matrixU();
-        MatrixXd V = svd.matrixV();
+    VectorXd s = svd.singularValues();
+    int length = s.size();
 
-        // test
-        MatrixXd S = MatrixXd::Zero(KQ.rows(), KQ.cols());
-        S.diagonal() = svd.singularValues();
-
-        VectorXd s = svd.singularValues();
-        int length = s.size();
-
-        MatrixXd Us = U.leftCols(length);
-        MatrixXd Vs = V.leftCols(length);
-        VectorXd s_sqrt = s.head(length).cwiseSqrt().real();
-        XQ1 = multDiag(Us, s_sqrt).adjoint();
-        XQ2 = multDiag(Vs, s_sqrt).adjoint();
-        //XQ1 = XQ1.adjoint();
-        //XQ2 = XQ2.adjoint();
-    }
-    else
-    {
-        // already been factorized(eg, dgm)
-        //XQ1 = XQ10;
-        //XQ2 = XQ20;
-    }
+    MatrixXd Us = U.leftCols(length);
+    MatrixXd Vs = V.leftCols(length);
+    VectorXd s_sqrt = s.head(length).cwiseSqrt().real();
+    MatrixXd XQ1 = multDiag(Us, s_sqrt).adjoint();
+    MatrixXd XQ2 = multDiag(Vs, s_sqrt).adjoint();
 
     // auxiliary variables for computing the derivative of the constant term
     MatrixXd QQ1 = XQ1.adjoint() * XQ1;
     MatrixXd QQ2 = XQ2.adjoint() * XQ2;
     MatrixXd GHHQQG = G1 * HH1.cwiseProduct(QQ1) * G1.adjoint() + G2 * HH2.cwiseProduct(QQ2) * G2.adjoint();
-    double gamma = QQ1.cwiseProduct(GG1).cwiseProduct(HH1).sum() + QQ2.cwiseProduct(GG2).cwiseProduct(HH2).sum();
-
-
-
-
 
 
     double eps = std::numeric_limits<double>::epsilon();
