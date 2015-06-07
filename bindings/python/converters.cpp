@@ -85,9 +85,53 @@ struct numpy2eigen {
     }
 };
 
+template<class T1, class T2>
+struct pair2tuple
+{
+    pair2tuple()
+    {
+        python::to_python_converter<std::pair<T1, T2>, pair2tuple<T1, T2>>();
+    }
+
+    static PyObject* convert(const std::pair<T1, T2>& p)
+    {
+        return python::incref(python::make_tuple(p.first, p.second).ptr());
+    }
+};
+
+template<class T1, class T2>
+struct tuple2pair
+{
+    tuple2pair()
+    {
+        python::converter::registry::push_back(&convertible, &construct, python::type_id<std::pair<T1, T2> >());
+    }
+
+    static void* convertible(PyObject* po)
+    {
+        return PyTuple_Check(po) && PyTuple_GET_SIZE(po) == 2 ? po : 0;
+    }
+
+    static void construct(PyObject* po, python::converter::rvalue_from_python_stage1_data* data)
+    {
+        void* storage = ((python::converter::rvalue_from_python_storage<std::pair<T1, T2> >*)data)->storage.bytes;
+
+        python::object o(python::borrowed(po));
+        std::pair<T1, T2> p;
+        p.first = python::extract<T1>(o[0]);
+        p.second = python::extract<T2>(o[1]);
+        new (storage)std::pair<T1, T2>(p);
+
+        data->convertible = storage;
+    }
+};
+
 void initializeConverters()
 {
     import_array();
     eigen2numpy();
     numpy2eigen();
+
+    pair2tuple<Eigen::MatrixXd, double>();
+    tuple2pair<Eigen::MatrixXd, double>();
 }

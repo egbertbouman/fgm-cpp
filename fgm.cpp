@@ -155,7 +155,7 @@ double pathDObjGm(MatrixXd& X, SparseMatrix<double>& G1s, SparseMatrix<double>& 
     return tmp1 + tmp2;
 }
 
-MatrixXd fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
+std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
              std::map<std::string, MatrixXd>& gph1, std::map<std::string, MatrixXd>& gph2,
              std::map<std::string, std::string>& params)
 {
@@ -454,7 +454,7 @@ MatrixXd fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
     }
     cout << acc << endl;
 
-    //std::pair<MatrixXd, double> result(X, acc);
-    return X;
+    std::pair<MatrixXd, double> result(X, acc);
+    return result;
 }
 
