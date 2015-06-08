@@ -426,7 +426,7 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
                 co += 1;
         }
         // percentage
-        acc = co / idx.size();
+        acc = co / (double)idx.size();
     }
     cout << acc << endl;
 
