@@ -413,6 +413,9 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
 
     }
 
+    // re-size to the original size
+    X.conservativeResize(ns[0], ns[1]);
+
     //accuracy
     double acc = 0;
     if (asgTX.size() > 0)
