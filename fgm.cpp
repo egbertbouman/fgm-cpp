@@ -115,7 +115,6 @@ MatrixXd gmPosDHun(MatrixXd& X0)
     VectorXd result_vector(n1);
     result_vector.fill(0);
     findMatching(X0, result_vector);
-    //cout << endl << "result_vector" << endl << result_vector << endl;
 
     // index -> matrix
     VectorXd idx;
@@ -133,7 +132,6 @@ MatrixXd gmPosDHun(MatrixXd& X0)
         }
         idx = sub2ind(n1, n2, temp1.adjoint(), temp2.adjoint());
     }
-    //cout << endl << "idx" << endl << idx << endl;
 
     MatrixXd X(n1, n2);
     X.fill(0);
@@ -217,10 +215,6 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
     SparseMatrix<double> H1s = H1.sparseView();
     SparseMatrix<double> H2s = H2.sparseView();
 
-    cout << G1.rows() << G1.cols() << endl;
-    cout << endl << G1.topLeftCorner(7, 7) << endl;
-    cout << endl << G2.topLeftCorner(7, 7) << endl;
-
     // factorize KQ using SVD
     Eigen::JacobiSVD<MatrixXd> svd(KQ, Eigen::ComputeFullU | Eigen::ComputeFullV);
 
@@ -241,10 +235,8 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
     MatrixXd QQ2 = XQ2.adjoint() * XQ2;
     MatrixXd GHHQQG = G1 * HH1.cwiseProduct(QQ1) * G1.adjoint() + G2 * HH2.cwiseProduct(QQ2) * G2.adjoint();
 
-
-    double eps = std::numeric_limits<double>::epsilon();
-    
     // initialize from a doubly stochastic matrix
+    double eps = std::numeric_limits<double>::epsilon();
     MatrixXd X0 = MatrixXd(Ct.rows(), Ct.cols());
     double iv = 1 + eps;
     for (int i = 0; i < X0.rows(); ++i)
@@ -274,22 +266,9 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
         X0 = normalize_bistochastic(X0, tol, 1000);
     }
 
-
-    // Compute objective for the path - following algorithm.
     SparseMatrix<double> Xs = X0.sparseView();
-    SparseMatrix<double> GXGs = G1s.adjoint() * Xs * G2s;
-    SparseMatrix<double> HXHs = H1s.adjoint() * Xs * H2s;
-    double tmp1 = KP.sparseView().cwiseProduct(Xs).sum();
-    double tmp2 = GXGs.cwiseProduct(HXHs).cwiseProduct(KQ).sum();
-    double objGm0 = tmp1 + tmp2;
-
-    MatrixXd nIts = MatrixXd::Zero(1, nAlp);
-    MatrixXd objs = MatrixXd::Zero(1, nAlp);
-    MatrixXd objGms = MatrixXd::Zero(1, nAlp);
-    MatrixXd objCons = MatrixXd::Zero(1, nAlp);
-    MatrixXd objVexs = MatrixXd::Zero(1, nAlp);
-    MatrixXd objCavs = MatrixXd::Zero(1, nAlp);
-    MatrixXd useIps = MatrixXd::Zero(1, nAlp);
+    SparseMatrix<double> GXGs, HXHs;
+    double tmp1, tmp2;
 
 
     // path-following
@@ -298,8 +277,7 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
         // scale of alpha
         double alp = alps(iAlp);
     
-        // ================MFW begin====================
-        //[X, nIts(iAlp), objIns] = mfwDIter(X0, alp, nItMa, nHst, isDeb);
+        // MFW
         vector<SparseMatrix<double>> Ys(nHst);
         SparseMatrix<double> X0s = X0.sparseView();
 
@@ -339,19 +317,18 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
             }
 
             // step size
-            // [aGm, bGm] = fwDStepGm(X0, V);
             SparseMatrix<double> GYGs = G1s.adjoint() * V * G2s;
             SparseMatrix<double> HYHs = H1s.adjoint() * V * H2s;
             double aGm = GYGs.cwiseProduct(HYHs).cwiseProduct(KQ).sum();
             double bGm = KP.sparseView().cwiseProduct(V).sum() + (GXGs.cwiseProduct(HYHs) + GYGs.cwiseProduct(HXHs)).cwiseProduct(KQ).sum();
 
-            // [aCon, bCon] = fwDStepCon(X0, V);
             MatrixXd YY = V * MatrixXd(V.adjoint());
             MatrixXd XY = X0s * MatrixXd(V.adjoint());
 
             tmp1 = multGXHSQTr(indG1.adjoint(), YY, indG1, IndHH1, QQ1);
             tmp2 = multGXHSQTr(indG2.adjoint(), YY, indG2, IndHH2, QQ2);
             double aCon = tmp1 + tmp2;
+
             tmp1 = multGXHSQTr(indG1.adjoint(), XY, indG1, IndHH1, QQ1);
             tmp2 = multGXHSQTr(indG2.adjoint(), XY, indG2, IndHH2, QQ2);
             double bCon = 2 * (tmp1 + tmp2);
@@ -359,9 +336,8 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
             double a = aGm + (alp - .5) * aCon;
             double b = bGm + (alp - .5) * bCon;
 
-            // t = fwStepOpt(a, b);
             double t = -b / a / 2;
-            //cout << endl << a << "\t" << b << "\t" << t << endl;
+
             if (t <= 0)
             {
                 t = (a > 0) ? 1 : 0;
@@ -392,22 +368,6 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
             X0s = X.sparseView();
         }
 
-        // ================MFW end====================
-        cout << endl << setprecision(3) << fixed << X.topLeftCorner(7, 7) << endl;
-
-        // objective
-        objGms(iAlp) = pathDObjGm(X, G1s, G2s, H1s, H2s, KP, KQ);
-
-        MatrixXd XX = X * X.adjoint();
-        tmp1 = multGXHSQTr(indG1.adjoint(), XX, indG1, IndHH1, QQ1);
-        tmp2 = multGXHSQTr(indG2.adjoint(), XX, indG2, IndHH2, QQ2);
-        objCons(iAlp) = tmp1 + tmp2;
-
-        objVexs(iAlp) = objGms(iAlp) - .5 * objCons(iAlp);
-        objCavs(iAlp) = objGms(iAlp) + .5 * objCons(iAlp);
-
-        objs(iAlp) = objGms(iAlp) + (alp - .5) * (objCons(iAlp) - 0);
-
         // store
         X0 = X;
 
@@ -431,7 +391,6 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
         // percentage
         acc = co / (double)idx.size();
     }
-    cout << acc << endl;
 
     std::pair<MatrixXd, double> result(X, acc);
     return result;
