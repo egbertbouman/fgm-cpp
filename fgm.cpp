@@ -11,6 +11,7 @@
 
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
+using Eigen::VectorXi;
 using Eigen::SparseMatrix;
 
 
@@ -79,9 +80,9 @@ int sub2ind(int dimrow, int dimcol, int row, int col)
 }
 
 
-VectorXd sub2ind(int dimrow, int dimcol, VectorXd setrow, VectorXd setcol)
+VectorXi sub2ind(int dimrow, int dimcol, VectorXi setrow, VectorXi setcol)
 {
-    VectorXd genidx(setrow.rows());
+    VectorXi genidx(setrow.rows());
     for (int i = 0; i < setrow.rows(); i++)
     {
         genidx(i) = sub2ind(dimrow, dimcol, setrow(i), setcol(i));
@@ -89,17 +90,18 @@ VectorXd sub2ind(int dimrow, int dimcol, VectorXd setrow, VectorXd setcol)
     return genidx;
 }
 
-VectorXd find(const VectorXd a)
+template <typename Derived>
+VectorXi find(const Eigen::DenseBase<Derived>& m)
 {
-    std::vector<double> res;
-    for (int i=0; i < a.rows(); i++)
+    std::vector<int> res;
+    for (int i=0; i < m.rows(); i++)
     {
-        if (a(i) != 0)
+        if (m(i) != 0)
         {
             res.push_back(i);
         }
     }
-    Eigen::Map<VectorXd> result(res.data(), res.size());
+    Eigen::Map<VectorXi> result(res.data(), res.size());
     return result;
 }
 
@@ -112,20 +114,20 @@ MatrixXd gmPosDHun(MatrixXd& X0)
     int n1 = X0.rows();
     int n2 = X0.cols();
 
-    VectorXd result_vector(n1);
+    VectorXi result_vector(n1);
     result_vector.fill(0);
     findMatching(X0, result_vector);
 
     // index -> matrix
-    VectorXd idx;
+    VectorXi idx;
     if (n1 <= n2)
     {
-        idx = sub2ind(n1, n2, VectorXd::LinSpaced(n1, 0, n1-1), result_vector.adjoint());
+        idx = sub2ind(n1, n2, VectorXi::LinSpaced(n1, 0, n1-1), result_vector.adjoint());
     }
     else
     {
-        VectorXd temp1 = find(result_vector);
-        VectorXd temp2(temp1.size());
+        VectorXi temp1 = find(result_vector);
+        VectorXi temp2(temp1.size());
         for (int i = 0; i < temp1.size(); i++)
         {
             temp2(i) = result_vector(temp1(i));
@@ -381,7 +383,7 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
     if (asgTX.size() > 0)
     {
         int co = 0;
-        VectorXd idx = find(asgTX);
+        VectorXi idx = find(asgTX);
         for (int i = 0; i < idx.size(); ++i)
         {
             // correct correspondences found
