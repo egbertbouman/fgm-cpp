@@ -70,16 +70,23 @@ struct numpy2eigen {
         PyArrayObject* pao = (PyArrayObject*) po;
         if (!PyArray_ISFLOAT(pao))
             throw std::invalid_argument("PyObject is not an array of floats/doubles!");
+        if (PyArray_NDIM(pao) != 2)
+            throw std::invalid_argument("PyObject is not a 2-dimensional array!");
         
         void* storage = ((python::converter::rvalue_from_python_storage<Eigen::MatrixXd>*)(data))->storage.bytes;
 
         int rows = PyArray_DIMS(pao)[0];
         int cols = PyArray_DIMS(pao)[1];
-        Eigen::MatrixXd& m = * new (storage) Eigen::MatrixXd(rows, cols);
-        Eigen::MatrixXd::Scalar* pyData = (Eigen::MatrixXd::Scalar*) PyArray_DATA(pao);
+
+        int stride1 = PyArray_STRIDE(pao, 0);
+        int stride2 = PyArray_STRIDE(pao, 1);
+
+        Eigen::MatrixXd& m = *new (storage)Eigen::MatrixXd(rows, cols);
+        double* pyData = (double*)PyArray_DATA(pao);
+        int dsize = sizeof(double);
         for (int i = 0; i < rows; ++i)
             for (int j = 0; j < cols; ++j)
-                m(i, j) = pyData[i * cols + j];
+                m(i, j) = *(pyData + i * (stride1 / dsize) + j * (stride2 / dsize));
 
         data->convertible = storage;
     }
