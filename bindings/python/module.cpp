@@ -8,7 +8,7 @@
 namespace python = boost::python;
 
 
-python::object fgm_python(PyObject* KP, PyObject* KQ, PyObject* Ct, PyObject* asgTX,
+python::object solve_python(PyObject* KP, PyObject* KQ, PyObject* Ct, PyObject* asgTX,
                           const python::dict& gph1, const python::dict& gph2,
                           const python::dict& params)
 {
@@ -26,5 +26,5 @@ python::object fgm_python(PyObject* KP, PyObject* KQ, PyObject* Ct, PyObject* as
 BOOST_PYTHON_MODULE(fgm)
 {
     initializeConverters();
-    python::def("fgm", fgm_python);
+    python::def("solve", solve_python);
 }

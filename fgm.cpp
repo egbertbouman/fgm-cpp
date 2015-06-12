@@ -2,121 +2,30 @@
 #include <string>
 #include <vector>
 #include <iostream>
-#include <iomanip>
+#include "util.cpp"
+#include "hungarian.cpp"
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
-#include "normalize_bistochastic.cpp"
-#include "multGXHSQTr.cpp"
-#include "hungarian.cpp"
 
 using Eigen::MatrixXd;
+using Eigen::MatrixXi;
 using Eigen::VectorXd;
 using Eigen::VectorXi;
 using Eigen::SparseMatrix;
 
 
-MatrixXd resize(const MatrixXd& m, int rows, int cols, double default)
+MatrixXd gmPosDHun(MatrixXd& X)
 {
-    if (m.rows() > rows || m.cols() > cols)
-        throw std::invalid_argument("Shrinking a matrix is currently not supported");
+    double max_oeff = X.maxCoeff();
+    X *= -1;
+    X.array() += max_oeff;
 
-    auto result = MatrixXd(rows, cols);
-    result.fill(default);
-    for (int i = 0; i < m.rows(); ++i)
-    {
-        for (int j = 0; j < m.cols(); ++j)
-            result(i, j) = m(i, j);
-    }
-    return result;
-}
-
-MatrixXd mat2ind(const MatrixXd& m)
-{
-    int k = 0;
-    MatrixXd result(2, m.size() + 1);
-    for (int i = 0; i < m.rows(); ++i)
-    {
-        for (int j = 0; j < m.cols(); ++j)
-        {
-            if (m(i, j) != 0)
-            {
-                result(1, k) = i+1;
-                result(0, k) = j+1;
-                ++k;
-            }
-        }
-    }
-    result(1, k) = m.rows();
-    result(0, k) = m.cols();
-    result.conservativeResize(2, k + 1);
-    return result;
-}
-
-MatrixXd mat2indC(const MatrixXd& m)
-{
-    MatrixXd result(1, m.cols());
-    result.fill(0);
-
-    for (int j = 0; j < m.cols(); ++j)
-        for (int i = 0; i < m.rows(); ++i)
-            if (m(i, j) != 0)
-            {
-                result(j) = i+1;
-                break;
-            }
-    return result;
-}
-
-MatrixXd multDiag(MatrixXd& A, VectorXd& v)
-{
-    int m = A.rows();
-    MatrixXd V = v.adjoint().replicate(m, 1);
-    return A.cwiseProduct(V);
-}
-
-int sub2ind(int dimrow, int dimcol, int row, int col)
-{
-    return dimrow*col + row;
-}
-
-
-VectorXi sub2ind(int dimrow, int dimcol, VectorXi setrow, VectorXi setcol)
-{
-    VectorXi genidx(setrow.rows());
-    for (int i = 0; i < setrow.rows(); i++)
-    {
-        genidx(i) = sub2ind(dimrow, dimcol, setrow(i), setcol(i));
-    }
-    return genidx;
-}
-
-template <typename Derived>
-VectorXi find(const Eigen::DenseBase<Derived>& m)
-{
-    std::vector<int> res;
-    for (int i=0; i < m.rows(); i++)
-    {
-        if (m(i) != 0)
-        {
-            res.push_back(i);
-        }
-    }
-    Eigen::Map<VectorXi> result(res.data(), res.size());
-    return result;
-}
-
-MatrixXd gmPosDHun(MatrixXd& X0)
-{
-    double max_oeff = X0.maxCoeff();
-    X0 *= -1;
-    X0.array() += max_oeff;
-
-    int n1 = X0.rows();
-    int n2 = X0.cols();
+    int n1 = X.rows();
+    int n2 = X.cols();
 
     VectorXi result_vector(n1);
     result_vector.fill(0);
-    findMatching(X0, result_vector);
+    findMatching(X, result_vector);
 
     // index -> matrix
     VectorXi idx;
@@ -135,24 +44,70 @@ MatrixXd gmPosDHun(MatrixXd& X0)
         idx = sub2ind(n1, n2, temp1.adjoint(), temp2.adjoint());
     }
 
-    MatrixXd X(n1, n2);
-    X.fill(0);
+    MatrixXd result(n1, n2);
+    result.fill(0);
     for (int i = 0; i < idx.size(); i++)
     {
-        X(idx(i)) = 1;
+        result(idx(i)) = 1;
     }
-    return X;
+    return result;
 }
 
-double pathDObjGm(MatrixXd& X, SparseMatrix<double>& G1s, SparseMatrix<double>& G2s, SparseMatrix<double>& H1s, SparseMatrix<double>& H2s, MatrixXd& KP, MatrixXd& KQ)
+double multGXHSQTr(const MatrixXd& indG, MatrixXd& X, MatrixXd& indH, MatrixXd& IndS0, MatrixXd& Q)
 {
-    SparseMatrix<double> Xs = X.sparseView();
-    SparseMatrix<double> GXGs = G1s.adjoint() * Xs * G2s;
-    SparseMatrix<double> HXHs = H1s.adjoint() * Xs * H2s;
+    int n = X.cols();
 
-    double tmp1 = KP.sparseView().cwiseProduct(Xs).sum();
-    double tmp2 = GXGs.cwiseProduct(HXHs).cwiseProduct(KQ).sum();
-    return tmp1 + tmp2;
+    MatrixXi IndS;
+    int mS, nS;
+    int lenS = IndS0.cols() - 1;
+
+    if (lenS < 0)
+    {
+        mS = nS = n;
+        IndS = MatrixXi(2*n, 1);
+        for (int p = 0; p < n; ++p)
+        {
+            IndS(p * 2) = p;
+            IndS(p * 2 + 1) = p;
+        }
+    }
+    else
+    {
+        mS = (int) IndS0(lenS * 2);
+        nS = (int) IndS0(lenS * 2 + 1);
+        IndS = MatrixXi(2*lenS, 1);
+        for (int p = 0; p < lenS; ++p)
+        {
+            IndS(p * 2) = (int) IndS0(p * 2) - 1;
+            IndS(p * 2 + 1) = (int) IndS0(p * 2 + 1) - 1;
+        }
+    }
+
+    // check the dimension
+    if (mS != indG.rows() || nS != indH.cols())
+        throw std::invalid_argument("Incorrect dimension!");
+
+    double result = 0;
+    int iS, jS, i, j, idxX, idxY;
+    for (int pS = 0; pS < lenS; ++pS)
+    {
+        iS = IndS((pS << 1));
+        jS = IndS((pS << 1) + 1);
+
+        i = (int) indG(iS);
+        i--;
+        j = (int) indH(jS);
+        j--;
+
+        if (i < 0 || j < 0)
+            continue;
+
+        idxY = jS * mS + iS;
+        idxX = j * n + i;
+        result += X(idxX) * Q(idxY);
+    }
+
+    return result;
 }
 
 std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
