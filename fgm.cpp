@@ -194,24 +194,23 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
 
     // initialize from a doubly stochastic matrix
     double eps = std::numeric_limits<double>::epsilon();
-    MatrixXd X0 = MatrixXd(Ct.rows(), Ct.cols());
+    MatrixXd X(Ct.rows(), Ct.cols());
     double iv = 1 + eps;
-    for (int i = 0; i < X0.rows(); ++i)
+    for (int i = 0; i < X.rows(); ++i)
     {
-        for (int j = 0; j < X0.cols(); ++j)
-            X0(i, j) = Ct(i, j) == 0 ? 0 : iv;
+        for (int j = 0; j < X.cols(); ++j)
+            X(i, j) = Ct(i, j) == 0 ? 0 : iv;
     }
 
     double tol = 1e-7;
-    n1 = X0.rows();
-    n2 = X0.cols();
-    MatrixXd X;
+    n1 = X.rows();
+    n2 = X.cols();
 
     if (n1 != n2)
     {
         // non-square
         int n_max = (n1 > n2) ? n1 : n2;
-        MatrixXd Xslack = resize(X0, n_max, n_max, 1);
+        MatrixXd Xslack = resize(X, n_max, n_max, 1);
 
         Xslack = normalize_bistochastic(Xslack, tol, 1000);
         Xslack.conservativeResize(n1, n2);
@@ -220,13 +219,13 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
     else
     {
         // square
-        X0 = normalize_bistochastic(X0, tol, 1000);
+        X = normalize_bistochastic(X, tol, 1000);
     }
 
-    SparseMatrix<double> Xs = X0.sparseView();
-    SparseMatrix<double> GXGs, HXHs;
+    SparseMatrix<double> Xs, GXGs, HXHs;
+    SparseMatrix<double> GHHQQGs = GHHQQG.sparseView();
+    SparseMatrix<double> KPs = KP.sparseView();
     double tmp1, tmp2;
-
 
     // path-following
     for (int iAlp = 0; iAlp < nAlp; ++iAlp)
@@ -236,31 +235,30 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
     
         // MFW
         vector<SparseMatrix<double>> Ys(nHst);
-        SparseMatrix<double> X0s = X0.sparseView();
+        Xs = X.sparseView();
 
         // main iteration
-        for (int nIt = 1; nIt < nItMa; ++nIt)
+        for (int nIt = 0; nIt < nItMa; ++nIt)
         {
             // gradient
-            GXGs = G1s.adjoint() * X0s * G2s;
-            HXHs = H1s.adjoint() * X0s * H2s;
-            SparseMatrix<double> GrGm = KP.sparseView() + H1s * GXGs.cwiseProduct(KQ) * H2s.adjoint() + G1s * HXHs.cwiseProduct(KQ) * G2s.adjoint();
-            SparseMatrix<double> GHHQQGs = GHHQQG.sparseView();
-            SparseMatrix<double> GrCon = 2 * GHHQQGs * X0s;
+            GXGs = G1s.adjoint() * Xs * G2s;
+            HXHs = H1s.adjoint() * Xs * H2s;
+            SparseMatrix<double> GrGm = KPs + H1s * GXGs.cwiseProduct(KQ) * H2s.adjoint() + G1s * HXHs.cwiseProduct(KQ) * G2s.adjoint();
+            SparseMatrix<double> GrCon = 2 * GHHQQGs * Xs;
             SparseMatrix<double> Gr = GrGm + (alp - .5) * GrCon;
 
             // optimal direction
             SparseMatrix<double> Y = gmPosDHun(MatrixXd(Gr)).sparseView();
-            SparseMatrix<double> V = Y - X0s;
+            SparseMatrix<double> V = Y - Xs;
 
             // save to history
-            int pHst = (nIt - 1) % nHst;
+            int pHst = nIt % nHst;
             Ys[pHst] = Y / nHst;
 
             // alternative direction
-            if (nIt >= nHst)
+            if (nIt - 1 >= nHst)
             {
-                SparseMatrix<double> W = -X0s;
+                SparseMatrix<double> W = -Xs;
                 for (int iHst = 0; iHst < nHst; ++iHst)
                     W = W + Ys[iHst];
 
@@ -277,10 +275,10 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
             SparseMatrix<double> GYGs = G1s.adjoint() * V * G2s;
             SparseMatrix<double> HYHs = H1s.adjoint() * V * H2s;
             double aGm = GYGs.cwiseProduct(HYHs).cwiseProduct(KQ).sum();
-            double bGm = KP.sparseView().cwiseProduct(V).sum() + (GXGs.cwiseProduct(HYHs) + GYGs.cwiseProduct(HXHs)).cwiseProduct(KQ).sum();
+            double bGm = KPs.cwiseProduct(V).sum() + (GXGs.cwiseProduct(HYHs) + GYGs.cwiseProduct(HXHs)).cwiseProduct(KQ).sum();
 
             MatrixXd YY = V * MatrixXd(V.adjoint());
-            MatrixXd XY = X0s * MatrixXd(V.adjoint());
+            MatrixXd XY = Xs * MatrixXd(V.adjoint());
 
             tmp1 = multGXHSQTr(indG1.adjoint(), YY, indG1, IndHH1, QQ1);
             tmp2 = multGXHSQTr(indG2.adjoint(), YY, indG2, IndHH2, QQ2);
@@ -298,6 +296,7 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
             if (t <= 0)
             {
                 t = (a > 0) ? 1 : 0;
+
             }
             else if (t <= 0.5)
             {
@@ -315,19 +314,15 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
             }
             
             // update
-            X = X0s + t * V;
+            X = Xs + t * V;
 
             // stop condition
-            if ((X.sparseView() - X0s).norm() < eps || t < eps)
+            if ((X.sparseView() - Xs).norm() < eps || t < eps)
                 break;
 
             // store
-            X0s = X.sparseView();
+            Xs = X.sparseView();
         }
-
-        // store
-        X0 = X;
-
     }
 
     // re-size to the original size
@@ -352,4 +347,3 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
     std::pair<MatrixXd, double> result(X, acc);
     return result;
 }
-
