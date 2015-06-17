@@ -1,11 +1,10 @@
-#include <map>  
-#include <string>
 #include <vector>
 #include <iostream>
-#include "util.cpp"
-#include "hungarian.cpp"
-#include <Eigen/Dense>
 #include <Eigen/Sparse>
+
+#include "util.hpp"
+#include "hungarian.hpp"
+#include "fgm.hpp"
 
 using Eigen::MatrixXd;
 using Eigen::MatrixXi;
@@ -53,7 +52,7 @@ MatrixXd gmPosDHun(MatrixXd& X)
     return result;
 }
 
-double multGXHSQTr(const MatrixXd& indG, MatrixXd& X, MatrixXd& indH, MatrixXd& IndS0, MatrixXd& Q)
+double multGXHSQTr(const MatrixXd& indG, const MatrixXd& X, const MatrixXd& indH, const MatrixXd& IndS0, const MatrixXd& Q)
 {
     int n = X.cols();
 
@@ -111,8 +110,9 @@ double multGXHSQTr(const MatrixXd& indG, MatrixXd& X, MatrixXd& indH, MatrixXd& 
 }
 
 std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
-             std::map<std::string, MatrixXd>& gph1, std::map<std::string, MatrixXd>& gph2,
-             std::map<std::string, std::string>& params)
+                                std::map<std::string, MatrixXd>& gph1,
+                                std::map<std::string, MatrixXd>& gph2,
+                                std::map<std::string, std::string>& params)
 {
     // TODO : get params from python
     int nAlp = 101;
@@ -234,7 +234,7 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
         double alp = alps(iAlp);
     
         // MFW
-        vector<SparseMatrix<double>> Ys(nHst);
+        std::vector<SparseMatrix<double>> Ys(nHst);
         Xs = X.sparseView();
 
         // main iteration

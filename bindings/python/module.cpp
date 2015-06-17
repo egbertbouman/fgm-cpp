@@ -1,9 +1,10 @@
-#include "fgm.cpp"
+#include "fgm.hpp"
 #include "converters.cpp"
 
 #include <boost/python/dict.hpp>
 #include <boost/python/module.hpp>
 #include <boost/python/extract.hpp>
+#include <boost/python/scope.hpp>
 
 namespace python = boost::python;
 
@@ -27,4 +28,5 @@ BOOST_PYTHON_MODULE(fgm)
 {
     initializeConverters();
     python::def("solve", solve_python);
+    python::scope().attr("version") = FGM_VERSION;
 }

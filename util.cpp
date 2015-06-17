@@ -1,17 +1,18 @@
-#include <Eigen/Dense>
+#include <vector>
+#include "util.hpp"
 
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 using Eigen::VectorXi;
 
 
-MatrixXd resize(const MatrixXd& m, int rows, int cols, double default)
+MatrixXd resize(const MatrixXd& m, int rows, int cols, double default_value)
 {
     if (m.rows() > rows || m.cols() > cols)
         throw std::invalid_argument("Shrinking a matrix is currently not supported");
 
     auto result = MatrixXd(rows, cols);
-    result.fill(default);
+    result.fill(default_value);
     for (int i = 0; i < m.rows(); ++i)
     {
         for (int j = 0; j < m.cols(); ++j)
@@ -57,7 +58,7 @@ MatrixXd mat2indC(const MatrixXd& m)
     return result;
 }
 
-MatrixXd multDiag(MatrixXd& A, VectorXd& v)
+MatrixXd multDiag(const MatrixXd& A, const VectorXd& v)
 {
     int m = A.rows();
     MatrixXd V = v.adjoint().replicate(m, 1);
@@ -69,8 +70,7 @@ int sub2ind(int dimrow, int dimcol, int row, int col)
     return dimrow*col + row;
 }
 
-
-VectorXi sub2ind(int dimrow, int dimcol, VectorXi setrow, VectorXi setcol)
+VectorXi sub2ind(int dimrow, int dimcol, const VectorXi setrow, const VectorXi setcol)
 {
     VectorXi genidx(setrow.rows());
     for (int i = 0; i < setrow.rows(); i++)
@@ -94,6 +94,9 @@ VectorXi find(const Eigen::DenseBase<Derived>& m)
     Eigen::Map<VectorXi> result(res.data(), res.size());
     return result;
 }
+
+template VectorXi find<MatrixXd>(const Eigen::DenseBase<MatrixXd>& m);
+template VectorXi find<VectorXi>(const Eigen::DenseBase<VectorXi>& m);
 
 MatrixXd normalize_bistochastic(const MatrixXd& X, double tol, int max_iters)
 {
@@ -132,4 +135,3 @@ MatrixXd normalize_bistochastic(const MatrixXd& X, double tol, int max_iters)
     }
     return X1;
 }
-

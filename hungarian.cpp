@@ -1,27 +1,10 @@
-#include <cstdlib>
-#include <iostream>
-#include <cmath>
-#include <ctime>
-#include <string>
-#include <vector>
-#include <fstream>
-#include <algorithm>
-#include <Eigen/Dense>
+#include "hungarian.hpp"
 
 using Eigen::MatrixXd;
 using Eigen::VectorXi;
-using namespace std;
 
-void findMatching(MatrixXd& m, VectorXi& assignment);
-void step2a(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim);
-void step2b(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim);
-void step3(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim);
-void step4(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim, int row, int col);
-void step5(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim);
-void buildassignmentvector(VectorXi& assignment, MatrixXd& starMatrix, int nOfRows, int nOfColumns);
-
-
-void findMatching(MatrixXd& m, VectorXi& assignment) {
+void findMatching(MatrixXd& m, VectorXi& assignment)
+{
     int nOfRows = m.rows();
     int nOfColumns = m.cols();
     int minDim, row, col;
@@ -31,8 +14,8 @@ void findMatching(MatrixXd& m, VectorXi& assignment) {
     MatrixXd starMatrix(m.rows(), m.cols());
     MatrixXd newStarMatrix(m.rows(), m.cols());
     MatrixXd primeMatrix(m.rows(), m.cols());
-    VectorXd coveredColumns(m.rows());
-    VectorXd coveredRows(m.cols());
+    VectorXi coveredColumns(m.rows());
+    VectorXi coveredRows(m.cols());
 
     starMatrix.fill(0);
     newStarMatrix.fill(0);
@@ -120,7 +103,8 @@ void findMatching(MatrixXd& m, VectorXi& assignment) {
     return;
 }
 
-void step2a(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim)
+void step2a(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, 
+            VectorXi& coveredColumns, VectorXi& coveredRows, int nOfRows, int nOfColumns, int minDim)
 {
     /* cover every column containing a starred zero */
     for (int col = 0; col<nOfColumns; col++)
@@ -139,7 +123,8 @@ void step2a(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& n
     step2b(assignment, m, starMatrix, newStarMatrix, primeMatrix, coveredColumns, coveredRows, nOfRows, nOfColumns, minDim);
 }
 
-void step2b(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim)
+void step2b(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, 
+            VectorXi& coveredColumns, VectorXi& coveredRows, int nOfRows, int nOfColumns, int minDim)
 {
     /* count covered columns */
     int nOfCoveredColumns = 0;
@@ -160,7 +145,8 @@ void step2b(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& n
 
 }
 
-void step3(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim)
+void step3(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, 
+           VectorXi& coveredColumns, VectorXi& coveredRows, int nOfRows, int nOfColumns, int minDim)
 {
     int starCol;
     bool zerosFound = true;
@@ -200,7 +186,8 @@ void step3(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& ne
     step5(assignment, m, starMatrix, newStarMatrix, primeMatrix, coveredColumns, coveredRows, nOfRows, nOfColumns, minDim);
 }
 
-void step4(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim, int row, int col)
+void step4(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix,
+           VectorXi& coveredColumns, VectorXi& coveredRows, int nOfRows, int nOfColumns, int minDim, int row, int col)
 {
     int starRow, starCol, primeRow, primeCol;
     int nOfElements = nOfRows*nOfColumns;
@@ -253,7 +240,8 @@ void step4(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& ne
     step2a(assignment, m, starMatrix, newStarMatrix, primeMatrix, coveredColumns, coveredRows, nOfRows, nOfColumns, minDim);
 }
 
-void step5(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, VectorXd& coveredColumns, VectorXd& coveredRows, int nOfRows, int nOfColumns, int minDim)
+void step5(VectorXi& assignment, MatrixXd& m, MatrixXd& starMatrix, MatrixXd& newStarMatrix, MatrixXd& primeMatrix, 
+           VectorXi& coveredColumns, VectorXi& coveredRows, int nOfRows, int nOfColumns, int minDim)
 {
     double h, value;
     int row, col;
