@@ -248,7 +248,8 @@ std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, Matrix
             SparseMatrix<double> Gr = GrGm + (alp - .5) * GrCon;
 
             // optimal direction
-            SparseMatrix<double> Y = gmPosDHun(MatrixXd(Gr)).sparseView();
+            MatrixXd Gr_temp = MatrixXd(Gr);
+            SparseMatrix<double> Y = gmPosDHun(Gr_temp).sparseView();
             SparseMatrix<double> V = Y - Xs;
 
             // save to history
