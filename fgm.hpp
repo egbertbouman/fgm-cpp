@@ -6,7 +6,7 @@
 #include <map>
 #include <Eigen/Dense>
 
-#define FGM_VERSION "0.0.1"
+#define FGM_VERSION "0.0.2"
 
 
 Eigen::MatrixXd gmPosDHun(Eigen::MatrixXd& X);
