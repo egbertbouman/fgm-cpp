@@ -112,13 +112,8 @@ double multGXHSQTr(const MatrixXd& indG, const MatrixXd& X, const MatrixXd& indH
 std::pair<MatrixXd, double> fgm(MatrixXd& KP, MatrixXd& KQ, MatrixXd& Ct, MatrixXd& asgTX,
                                 std::map<std::string, MatrixXd>& gph1,
                                 std::map<std::string, MatrixXd>& gph2,
-                                std::map<std::string, std::string>& params)
+                                int nAlp, int nItMa, int nHst)
 {
-    // TODO : get params from python
-    int nAlp = 101;
-    int nItMa = 100;
-    int nHst = 10;
-
     // weight
     VectorXd alps = VectorXd::LinSpaced(nAlp, 0, 1);
 

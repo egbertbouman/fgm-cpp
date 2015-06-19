@@ -18,6 +18,6 @@ std::pair<Eigen::MatrixXd, double> fgm(Eigen::MatrixXd& KP, Eigen::MatrixXd& KQ,
                                        Eigen::MatrixXd& Ct, Eigen::MatrixXd& asgTX, 
                                        std::map<std::string, Eigen::MatrixXd>& gph1,
                                        std::map<std::string, Eigen::MatrixXd>& gph2,
-                                       std::map<std::string, std::string>& params);
+                                       int nAlp = 101, int nItMa = 100, int nHst = 10);
 
 #endif

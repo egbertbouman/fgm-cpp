@@ -29,7 +29,7 @@ if (NOT EXISTS ${EIGEN_ROOT})
 endif()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/bindings/python)
-include_directories($ENV{EIGEN_ROOT} /usr/include/eigen3)
+include_directories($ENV{EIGEN_ROOT})
 include_directories(${Boost_INCLUDE_DIRS})
 include_directories(${PYTHON_INCLUDE_DIRS} ${NUMPY_INCLUDE_DIR})
 
