@@ -14,8 +14,19 @@ find_package(PythonInterp REQUIRED)
 find_package(PythonLibs REQUIRED)
 find_package(Boost REQUIRED COMPONENTS python)
 
-execute_process(COMMAND ${PYTHON_EXECUTABLE} -c "import numpy;print numpy.get_include()"
+execute_process(COMMAND ${PYTHON_EXECUTABLE} -c "try: import numpy; print numpy.get_include()\nexcept: pass\n"
   OUTPUT_VARIABLE NUMPY_INCLUDE_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
+if (NOT EXISTS ${NUMPY_INCLUDE_DIR})
+  message(FATAL_ERROR "Please make sure you have NumPy installed.")
+endif()
+
+set(EIGEN_ROOT "$ENV{EIGEN_ROOT}")
+if(NOT EIGEN_ROOT)
+  set(EIGEN_ROOT /usr/include/eigen3)
+endif()
+if (NOT EXISTS ${EIGEN_ROOT})
+  message(FATAL_ERROR "Please point EIGEN_ROOT to your Eigen3 directory.")
+endif()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/bindings/python)
 include_directories($ENV{EIGEN_ROOT} /usr/include/eigen3)
