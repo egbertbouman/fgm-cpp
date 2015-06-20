@@ -1,5 +1,5 @@
-#ifndef UTIL_H_INCLUDED
-#define UTIL_H_INCLUDED
+#ifndef UTIL_HPP_INCLUDED
+#define UTIL_HPP_INCLUDED
 
 #include <Eigen/Dense>
 

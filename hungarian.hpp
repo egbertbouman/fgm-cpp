@@ -1,5 +1,5 @@
-#ifndef HUNGARIAN_H_INCLUDED
-#define HUNGARIAN_H_INCLUDED
+#ifndef HUNGARIAN_HPP_INCLUDED
+#define HUNGARIAN_HPP_INCLUDED
 
 #include <Eigen/Dense>
 

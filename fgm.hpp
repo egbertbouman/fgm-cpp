@@ -1,5 +1,5 @@
-#ifndef FGM_H_INCLUDED
-#define FGM_H_INCLUDED
+#ifndef FGM_HPP_INCLUDED
+#define FGM_HPP_INCLUDED
 
 #include <utility>
 #include <string>
